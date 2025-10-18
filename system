@@ -1,0 +1,931 @@
+const { Client, GatewayIntentBits, PermissionsBitField, EmbedBuilder, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType, ChannelType, ApplicationCommandOptionType, StringSelectMenuBuilder } = require("discord.js");
+const fs = require("fs");
+const path = require("path");
+
+// ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ط¨ظˆطھ
+const DISCORD_TOKEN = "MTQyOTIxMDc5NjU1NDA1OTgxNg.Geo_DW.FKmf8dX4iPCzitnKVafyAT4k2tDkOYdfrUwqM0"; // طھظˆظƒظ†ظƒ
+const CLIENT_ID = ""; // ط§ظٹط¯ظٹ ط§ظ„ط¨ظˆطھ
+const YOUTUBE_CHANNEL = "https://youtube.com/@n-muc?si=H05Z3PX9h1WF-12X";// ط±ط§ط¨ط· ظ‚ظ†ط§طھظƒ
+
+// ط¥ظ†ط´ط§ط، ط§ظ„ط¹ظ…ظٹظ„
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+    ],
+});
+
+// ط¥ظ†ط´ط§ط، ظ…ط¬ظ„ط¯ ظ‚ظˆط§ط¹ط¯ ط§ظ„ط¨ظٹط§ظ†ط§طھ ط¥ط°ط§ ظ„ظ… ظٹظƒظ† ظ…ظˆط¬ظˆط¯ط§ظ‹
+const DB_FOLDER = "./databases";
+if (!fs.existsSync(DB_FOLDER)) {
+    fs.mkdirSync(DB_FOLDER);
+}
+
+// ط¯ط§ظ„ط© ظ„طھط­ظ…ظٹظ„ ظ‚ط§ط¹ط¯ط© ط¨ظٹط§ظ†ط§طھ ط³ظٹط±ظپط± ظ…ط¹ظٹظ†
+function loadGuildDatabase(guildId) {
+    const dbPath = path.join(DB_FOLDER, `${guildId}.json`);
+    try {
+        if (fs.existsSync(dbPath)) {
+            return JSON.parse(fs.readFileSync(dbPath, "utf8"));
+        }
+    } catch (error) {
+        console.error(`ط®ط·ط£ ظپظٹ طھط­ظ…ظٹظ„ ظ‚ط§ط¹ط¯ط© ط¨ظٹط§ظ†ط§طھ ط§ظ„ط³ظٹط±ظپط± ${guildId}:`, error);
+    }
+    return {
+        guildId: guildId,
+        guildName: "",
+        joinedAt: new Date().toISOString(),
+        settings: {
+            language: "ar",
+            deleteConfirmation: true,
+            logChannel: null,
+            deleteLinksEnabled: false,
+            allowedRoleId: null
+        },
+        stats: {
+            totalDeletes: 0,
+            categoriesDeleted: 0,
+            channelsDeleted: 0,
+            lastActivity: new Date().toISOString()
+        },
+        history: []
+    };
+}
+
+// ط¯ط§ظ„ط© ظ„ط­ظپط¸ ظ‚ط§ط¹ط¯ط© ط¨ظٹط§ظ†ط§طھ ط³ظٹط±ظپط± ظ…ط¹ظٹظ†
+function saveGuildDatabase(guildId, data) {
+    const dbPath = path.join(DB_FOLDER, `${guildId}.json`);
+    try {
+        data.stats.lastActivity = new Date().toISOString();
+        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error(`ط®ط·ط£ ظپظٹ ط­ظپط¸ ظ‚ط§ط¹ط¯ط© ط¨ظٹط§ظ†ط§طھ ط§ظ„ط³ظٹط±ظپط± ${guildId}:`, error);
+    }
+}
+
+// ط¯ط§ظ„ط© ظ„ط¥ط¶ط§ظپط© ط³ط¬ظ„ ظپظٹ ط§ظ„طھط§ط±ظٹط®
+function addToHistory(guildId, action, details, userId) {
+    const db = loadGuildDatabase(guildId);
+    db.history.push({
+        timestamp: new Date().toISOString(),
+        action: action,
+        details: details,
+        userId: userId,
+        id: Date.now()
+    });
+    
+    // ط§ظ„ط§ط­طھظپط§ط¸ ط¨ط¢ط®ط± 50 ط³ط¬ظ„ ظپظ‚ط·
+    if (db.history.length > 50) {
+        db.history = db.history.slice(-50);
+    }
+    
+    saveGuildDatabase(guildId, db);
+}
+
+// ط¯ط§ظ„ط© ظ„ظ„طھط­ظ‚ظ‚ ظ…ظ† ط§ظ„طµظ„ط§ط­ظٹط§طھ
+function hasAdminPermission(member) {
+    return member.permissions.has(PermissionsBitField.Flags.Administrator);
+}
+
+// ط¯ط§ظ„ط© ظ„ط¥ظ†ط´ط§ط، Embed ط¬ظ…ظٹظ„
+function createEmbed(title, description, color = 0x00AE86) {
+    return new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(description)
+        .setColor(color)
+        .setFooter({ 
+            text: "N-MUC Bot | ظ‚ظ†ط§ط© N-MUC ط¹ظ„ظ‰ ظٹظˆطھظٹظˆط¨", 
+            iconURL: client.user?.displayAvatarURL() 
+        })
+        .setTimestamp();
+}
+
+// ط£ظ…ط± ط­ط°ظپ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ
+async function deleteCategory(interaction) {
+    if (!hasAdminPermission(interaction.member)) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+            "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const category = interaction.options.getChannel("category");
+    
+    if (!category || category.type !== ChannelType.GuildCategory) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£",
+            "ظٹط±ط¬ظ‰ طھط­ط¯ظٹط¯ ظƒط§طھط¬ظˆط±ظٹ طµط­ظٹط­.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const channels = category.children.cache;
+    const channelCount = channels.size;
+
+    const embed = createEmbed(
+        "âڑ ï¸ڈ طھط£ظƒظٹط¯ ط­ط°ظپ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ",
+        `ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط­ط°ظپ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ **${category.name}**طں\n\n` +
+        `ًں“ٹ **ط¹ط¯ط¯ ط§ظ„ط±ظˆظ…ط§طھ:** ${channelCount}\n` +
+        `ًں“‌ **ط£ط³ظ…ط§ط، ط§ظ„ط±ظˆظ…ط§طھ:**\n${channels.map(ch => `â€¢ ${ch.name}`).join("\n") || "ظ„ط§ طھظˆط¬ط¯ ط±ظˆظ…ط§طھ"}\n\n` +
+        `âڑ ï¸ڈ **طھط­ط°ظٹط±:** ظ‡ط°ط§ ط§ظ„ط¥ط¬ط±ط§ط، ظ„ط§ ظٹظ…ظƒظ† ط§ظ„طھط±ط§ط¬ط¹ ط¹ظ†ظ‡!`,
+        0xFFAA00
+    );
+
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`confirm_delete_category_${category.id}`)
+                .setLabel("ظ†ط¹ظ…طŒ ط§ط­ط°ظپ")
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji("ًں—‘ï¸ڈ"),
+            new ButtonBuilder()
+                .setCustomId("cancel_delete")
+                .setLabel("ط¥ظ„ط؛ط§ط،")
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji("â‌Œ")
+        );
+
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+}
+
+// ط£ظ…ط± ط­ط°ظپ ط§ظ„ط±ظˆظ…ط§طھ ط¨ط§ظ„ط§ط³ظ…
+async function deleteRoomsByName(interaction) {
+    if (!hasAdminPermission(interaction.member)) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+            "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const namePrefix = interaction.options.getString("name");
+    
+    if (!namePrefix || namePrefix.length < 1) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£",
+            "ظٹط±ط¬ظ‰ ط¥ط¯ط®ط§ظ„ ط§ط³ظ… ط£ظˆ ط¨ط¯ط§ظٹط© ط§ط³ظ… ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ط±ط§ط¯ ط­ط°ظپظ‡ط§.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const guild = interaction.guild;
+    const matchingChannels = guild.channels.cache.filter(channel => 
+        channel.name.toLowerCase().startsWith(namePrefix.toLowerCase()) && 
+        (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice) 
+    );
+
+    if (matchingChannels.size === 0) {
+        const embed = createEmbed(
+            "â‌Œ ظ„ظ… ظٹطھظ… ط§ظ„ط¹ط«ظˆط± ط¹ظ„ظ‰ ط±ظˆظ…ط§طھ",
+            `ظ„ظ… ظٹطھظ… ط§ظ„ط¹ط«ظˆط± ط¹ظ„ظ‰ ط£ظٹ ط±ظˆظ…ط§طھ طھط¨ط¯ط£ ط¨ظ€ **${namePrefix}**`,
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const channelList = matchingChannels.map(ch => `â€¢ ${ch.name} (${ch.type === ChannelType.GuildText ? "ظ†طµ" : "طµظˆطھ"})`).join("\n");
+    
+    const embed = createEmbed(
+        "âڑ ï¸ڈ طھط£ظƒظٹط¯ ط­ط°ظپ ط§ظ„ط±ظˆظ…ط§طھ",
+        `طھظ… ط§ظ„ط¹ط«ظˆط± ط¹ظ„ظ‰ **${matchingChannels.size}** ط±ظˆظ… طھط¨ط¯ط£ ط¨ظ€ **${namePrefix}**:\n\n` +
+        `ًں“‌ **ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ط·ط§ط¨ظ‚ط©:**\n${channelList}\n\n` +
+        `âڑ ï¸ڈ **طھط­ط°ظٹط±:** ظ‡ط°ط§ ط§ظ„ط¥ط¬ط±ط§ط، ظ„ط§ ظٹظ…ظƒظ† ط§ظ„طھط±ط§ط¬ط¹ ط¹ظ†ظ‡!`,
+        0xFFAA00
+    );
+
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`confirm_delete_rooms_${namePrefix}`)
+                .setLabel("ظ†ط¹ظ…طŒ ط§ط­ط°ظپ ط§ظ„ظƒظ„")
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji("ًں—‘ï¸ڈ"),
+            new ButtonBuilder()
+                .setCustomId("cancel_delete")
+                .setLabel("ط¥ظ„ط؛ط§ط،")
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji("â‌Œ")
+        );
+
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+}
+
+// ظ…ط¹ط§ظ„ط¬ ط§ظ„ط£ط²ط±ط§ط±
+async function handleButtonInteraction(interaction) {
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+
+    if (interaction.customId === "cancel_delete") {
+        const embed = createEmbed(
+            "âœ… طھظ… ط§ظ„ط¥ظ„ط؛ط§ط،",
+            "طھظ… ط¥ظ„ط؛ط§ط، ط¹ظ…ظ„ظٹط© ط§ظ„ط­ط°ظپ ط¨ظ†ط¬ط§ط­.",
+            0x00FF00
+        );
+        return interaction.update({ embeds: [embed], components: [] });
+    }
+
+    if (interaction.customId.startsWith("confirm_delete_category_")) {
+        const categoryId = interaction.customId.split("_")[3];
+        const category = interaction.guild.channels.cache.get(categoryId);
+        
+        if (!category) {
+            const embed = createEmbed(
+                "â‌Œ ط®ط·ط£",
+                "ظ„ظ… ظٹطھظ… ط§ظ„ط¹ط«ظˆط± ط¹ظ„ظ‰ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ.",
+                0xFF0000
+            );
+            return interaction.update({ embeds: [embed], components: [] });
+        }
+
+        try {
+            const channels = category.children.cache;
+            let deletedCount = 0;
+            const channelNames = [];
+
+            // ط­ط°ظپ ط¬ظ…ظٹط¹ ط§ظ„ط±ظˆظ…ط§طھ ظپظٹ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ
+            for (const channel of channels.values()) {
+                channelNames.push(channel.name);
+                await channel.delete();
+                deletedCount++;
+            }
+
+            // ط­ط°ظپ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ ظ†ظپط³ظ‡
+            await category.delete();
+
+            // طھط­ط¯ظٹط« ط§ظ„ط¥ط­طµط§ط¦ظٹط§طھ
+            const db = loadGuildDatabase(guildId);
+            db.stats.totalDeletes++;
+            db.stats.categoriesDeleted++;
+            db.stats.channelsDeleted += deletedCount;
+            saveGuildDatabase(guildId, db);
+
+            // ط¥ط¶ط§ظپط© ط§ظ„ط³ط¬ظ„
+            addToHistory(guildId, "delete_category", {
+                categoryName: category.name,
+                channelsDeleted: deletedCount,
+                channelNames: channelNames
+            }, userId);
+
+            const embed = createEmbed(
+                "âœ… طھظ… ط§ظ„ط­ط°ظپ ط¨ظ†ط¬ط§ط­",
+                `طھظ… ط­ط°ظپ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ **${category.name}** ظ…ط¹ **${deletedCount}** ط±ظˆظ… ط¨ظ†ط¬ط§ط­.\n\n` +
+                `ًں“ٹ **ط¥ط¬ظ…ط§ظ„ظٹ ط¹ظ…ظ„ظٹط§طھ ط§ظ„ط­ط°ظپ ظپظٹ ظ‡ط°ط§ ط§ظ„ط³ظٹط±ظپط±:** ${db.stats.totalDeletes}`,
+                0x00FF00
+            );
+            
+            await interaction.update({ embeds: [embed], components: [] });
+
+        } catch (error) {
+            console.error("ط®ط·ط£ ظپظٹ ط­ط°ظپ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ:", error);
+            const embed = createEmbed(
+                "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„ط­ط°ظپ",
+                "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط­ط°ظپ ط§ظ„ظƒط§طھط¬ظˆط±ظٹ. طھط£ظƒط¯ ظ…ظ† ط£ظ† ط§ظ„ط¨ظˆطھ ظ„ط¯ظٹظ‡ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط©.",
+                0xFF0000
+            );
+            await interaction.update({ embeds: [embed], components: [] });
+        }
+    }
+
+    if (interaction.customId.startsWith("confirm_delete_rooms_")) {
+        const namePrefix = interaction.customId.split("_")[3];
+        const guild = interaction.guild;
+        
+        const matchingChannels = guild.channels.cache.filter(channel => 
+            channel.name.toLowerCase().startsWith(namePrefix.toLowerCase()) && 
+            (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice)
+        );
+
+        try {
+            let deletedCount = 0;
+            const channelNames = [];
+            
+            for (const channel of matchingChannels.values()) {
+                channelNames.push(channel.name);
+                await channel.delete();
+                deletedCount++;
+            }
+
+            // طھط­ط¯ظٹط« ط§ظ„ط¥ط­طµط§ط¦ظٹط§طھ
+            const db = loadGuildDatabase(guildId);
+            db.stats.totalDeletes++;
+            db.stats.channelsDeleted += deletedCount;
+            saveGuildDatabase(guildId, db);
+
+            // ط¥ط¶ط§ظپط© ط§ظ„ط³ط¬ظ„
+            addToHistory(guildId, "delete_rooms_by_name", {
+                namePrefix: namePrefix,
+                channelsDeleted: deletedCount,
+                channelNames: channelNames
+            }, userId);
+
+            const embed = createEmbed(
+                "âœ… طھظ… ط§ظ„ط­ط°ظپ ط¨ظ†ط¬ط§ط­",
+                `طھظ… ط­ط°ظپ **${deletedCount}** ط±ظˆظ… طھط¨ط¯ط£ ط¨ظ€ **${namePrefix}** ط¨ظ†ط¬ط§ط­.\n\n` +
+                `ًں“ٹ **ط¥ط¬ظ…ط§ظ„ظٹ ط¹ظ…ظ„ظٹط§طھ ط§ظ„ط­ط°ظپ ظپظٹ ظ‡ط°ط§ ط§ظ„ط³ظٹط±ظپط±:** ${db.stats.totalDeletes}`,
+                0x00FF00
+            );
+            
+            await interaction.update({ embeds: [embed], components: [] });
+
+        } catch (error) {
+            console.error("ط®ط·ط£ ظپظٹ ط­ط°ظپ ط§ظ„ط±ظˆظ…ط§طھ:", error);
+            const embed = createEmbed(
+                "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„ط­ط°ظپ",
+                "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط­ط°ظپ ط§ظ„ط±ظˆظ…ط§طھ. طھط£ظƒط¯ ظ…ظ† ط£ظ† ط§ظ„ط¨ظˆطھ ظ„ط¯ظٹظ‡ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط©.",
+                0xFF0000
+            );
+            await interaction.update({ embeds: [embed], components: [] });
+        }
+    }
+}
+
+// ط£ظ…ط± ط§ظ„ظ…ط³ط§ط¹ط¯ط©
+async function helpCommand(interaction) {
+    const embed = createEmbed(
+        "ًں“ڑ ظ…ط³ط§ط¹ط¯ط© ط§ظ„ط¨ظˆطھ",
+        `ظ…ط±ط­ط¨ط§ظ‹ ط¨ظƒ ظپظٹ ط¨ظˆطھ ط¥ط¯ط§ط±ط© ط§ظ„ط³ظٹط±ظپط±! ًںژ‰\n\n` +
+        `**ًں”§ ط§ظ„ط£ظˆط§ظ…ط± ط§ظ„ظ…طھط§ط­ط©:**\n\n` +
+        `\`/delete-category\` - ط­ط°ظپ ظƒط§طھط¬ظˆط±ظٹ ظ…ط¹ ط¬ظ…ظٹط¹ ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ظˆط¬ظˆط¯ط© ظپظٹظ‡ (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/delete-room\` - ط­ط°ظپ ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„طھظٹ طھط¨ط¯ط£ ط¨ظ†طµ ظ…ط¹ظٹظ† (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/lock\` - ظ‚ظپظ„ ظ‚ظ†ط§ط© ظ…ط¹ظٹظ†ط© (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/unlock\` - ظپطھط­ ظ‚ظ†ط§ط© ظ…ط¹ظٹظ†ط© (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/ping\` - ط¹ط±ط¶ ط³ط±ط¹ط© ط§ط³طھط¬ط§ط¨ط© ط§ظ„ط¨ظˆطھ (ظ„ظ„ط¬ظ…ظٹط¹)\n` +
+        `\`/help\` - ط¹ط±ط¶ ظ‡ط°ظ‡ ط§ظ„ط±ط³ط§ظ„ط© (ظ„ظ„ط¬ظ…ظٹط¹)\n` +
+        `\`/info\` - ظ…ط¹ظ„ظˆظ…ط§طھ ط¹ظ† ط§ظ„ط¨ظˆطھ (ظ„ظ„ط¬ظ…ظٹط¹)\n` +
+        `\`/stats\` - ط¥ط­طµط§ط¦ظٹط§طھ ط§ظ„ط³ظٹط±ظپط± (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/history\` - طھط§ط±ظٹط® ط§ظ„ط¹ظ…ظ„ظٹط§طھ (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/add-reply\` - ط¥ط¶ط§ظپط© ط±ط¯ طھظ„ظ‚ط§ط¦ظٹ ظ„ظƒظ„ظ…ط§طھ ظ…ط­ط¯ط¯ط© (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/reply\` - ط¹ط±ط¶ ط¬ظ…ظٹط¹ ط§ظ„ط±ط¯ظˆط¯ ط§ظ„طھظ„ظ‚ط§ط¦ظٹط© ظ…ط¹ ط®ظٹط§ط±ط§طھ ط§ظ„ط­ط°ظپ (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n` +
+        `\`/delete_link\` - طھظپط¹ظٹظ„/طھط¹ط·ظٹظ„ ظ…ظ†ط¹ ط§ظ„ط±ظˆط§ط¨ط· ظ…ط¹ طھط­ط¯ظٹط¯ ط±طھط¨ط© ظ…ط³ظ…ظˆط­ط© (ظ„ظ„ظ…ط´ط±ظپظٹظ†)\n\n` +
+        `**âڑ ï¸ڈ ظ…ظ„ط§ط­ط¸ط© ظ…ظ‡ظ…ط©:**\n` +
+        `â€¢ ظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© \`Administrator\` ظ„ط§ط³طھط®ط¯ط§ظ… ط£ظˆط§ظ…ط± ط§ظ„ط­ط°ظپ ظˆط§ظ„ظ‚ظپظ„/ط§ظ„ظپطھط­ ظˆط¥ط¯ط§ط±ط© ط§ظ„ط±ط¯ظˆط¯ ظˆظ…ظ†ط¹ ط§ظ„ط±ظˆط§ط¨ط·\n` +
+        `â€¢ ط¬ظ…ظٹط¹ ط¹ظ…ظ„ظٹط§طھ ط§ظ„ط­ط°ظپ ظ†ظ‡ط§ط¦ظٹط© ظˆظ„ط§ ظٹظ…ظƒظ† ط§ظ„طھط±ط§ط¬ط¹ ط¹ظ†ظ‡ط§\n` +
+        `â€¢ ظƒظ„ ط³ظٹط±ظپط± ظ„ظ‡ ظ‚ط§ط¹ط¯ط© ط¨ظٹط§ظ†ط§طھ ظ…ظ†ظپطµظ„ط©\n\n` +
+        `**ًںژ¥ ظ‚ظ†ط§ط© ط§ظ„ظ…ط·ظˆط±:**\n[N-MUC ط¹ظ„ظ‰ ظٹظˆطھظٹظˆط¨](${YOUTUBE_CHANNEL})`,
+        0x00AE86
+    );
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+// ط£ظ…ط± ظ…ط¹ظ„ظˆظ…ط§طھ ط§ظ„ط¨ظˆطھ
+async function infoCommand(interaction) {
+    const guild = interaction.guild;
+    const db = loadGuildDatabase(guild.id);
+    
+    const embed = createEmbed(
+        "ًں“ٹ ظ…ط¹ظ„ظˆظ…ط§طھ ط§ظ„ط¨ظˆطھ",
+        `**ًں¤– ط§ط³ظ… ط§ظ„ط¨ظˆطھ:** ${client.user.username}\n` +
+        `**ًں†” ظ…ط¹ط±ظپ ط§ظ„ط¨ظˆطھ:** ${client.user.id}\n` +
+        `**ًں“… طھط§ط±ظٹط® ط§ظ„ط¥ظ†ط´ط§ط،:** <t:${Math.floor(client.user.createdTimestamp / 1000)}:F>\n` +
+        `**ًںŒگ ط¹ط¯ط¯ ط§ظ„ط³ظٹط±ظپط±ط§طھ:** ${client.guilds.cache.size}\n` +
+        `**ًں‘¥ ط¹ط¯ط¯ ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ†:** ${client.users.cache.size}\n\n` +
+        `**ًں“ˆ ط¥ط­طµط§ط¦ظٹط§طھ ط§ظ„ط³ظٹط±ظپط± ط§ظ„ط­ط§ظ„ظٹ:**\n` +
+        `â€¢ **ط§ظ„ط£ط¹ط¶ط§ط،:** ${guild.memberCount}\n` +
+        `â€¢ **ط§ظ„ط±ظˆظ…ط§طھ:** ${guild.channels.cache.size}\n` +
+        `â€¢ **ط§ظ„ط£ط¯ظˆط§ط±:** ${guild.roles.cache.size}\n` +
+        `â€¢ **ط§ظ†ط¶ظ… ط§ظ„ط¨ظˆطھ:** <t:${Math.floor(new Date(db.joinedAt).getTime() / 1000)}:R>\n\n` +
+        `**ًںژ¥ ظ‚ظ†ط§ط© ط§ظ„ظ…ط·ظˆط±:**\n[N-MUC ط¹ظ„ظ‰ ظٹظˆطھظٹظˆط¨](${YOUTUBE_CHANNEL})\n\n` +
+        `**ًں’» طھظ… طھط·ظˆظٹط± ط§ظ„ط¨ظˆطھ ط¨ظˆط§ط³ط·ط©:** N-MUC`,
+        0x00AE86
+    );
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+// ط£ظ…ط± ط§ظ„ط¥ط­طµط§ط¦ظٹط§طھ
+async function statsCommand(interaction) {
+    if (!hasAdminPermission(interaction.member)) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+            "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+    const guildId = interaction.guild.id;
+    const db = loadGuildDatabase(guildId);
+    
+    const embed = createEmbed(
+        "ًں“ٹ ط¥ط­طµط§ط¦ظٹط§طھ ط§ظ„ط³ظٹط±ظپط±",
+        `**ًں—‘ï¸ڈ ط¥ط¬ظ…ط§ظ„ظٹ ط¹ظ…ظ„ظٹط§طھ ط§ظ„ط­ط°ظپ:** ${db.stats.totalDeletes}\n` +
+        `**ًں“پ ط§ظ„ظƒط§طھط¬ظˆط±ظٹط§طھ ط§ظ„ظ…ط­ط°ظˆظپط©:** ${db.stats.categoriesDeleted}\n` +
+        `**ًں’¬ ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ط­ط°ظˆظپط©:** ${db.stats.channelsDeleted}\n` +
+        `**ًں“… ط¢ط®ط± ظ†ط´ط§ط·:** <t:${Math.floor(new Date(db.stats.lastActivity).getTime() / 1000)}:R>\n` +
+        `**ًں“‌ ط¹ط¯ط¯ ط§ظ„ط³ط¬ظ„ط§طھ:** ${db.history.length}\n\n` +
+        `**â„¹ï¸ڈ ظ…ط¹ظ„ظˆظ…ط§طھ ظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ:**\n` +
+        `â€¢ **ظ…ط¹ط±ظپ ط§ظ„ط³ظٹط±ظپط±:** \`${db.guildId}\`\n` +
+        `â€¢ **ط§ط³ظ… ط§ظ„ط³ظٹط±ظپط±:** ${db.guildName || interaction.guild.name}\n` +
+        `â€¢ **طھط§ط±ظٹط® ط§ظ„ط§ظ†ط¶ظ…ط§ظ…:** <t:${Math.floor(new Date(db.joinedAt).getTime() / 1000)}:F>`,
+        0x00AE86
+    );
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+// ط£ظ…ط± ط§ظ„طھط§ط±ظٹط®
+async function historyCommand(interaction) {
+    if (!hasAdminPermission(interaction.member)) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+            "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+    const guildId = interaction.guild.id;
+    const db = loadGuildDatabase(guildId);
+    
+    if (db.history.length === 0) {
+        const embed = createEmbed(
+            "ًں“‌ طھط§ط±ظٹط® ط§ظ„ط¹ظ…ظ„ظٹط§طھ",
+            "ظ„ط§ طھظˆط¬ط¯ ط¹ظ…ظ„ظٹط§طھ ظ…ط³ط¬ظ„ط© ظپظٹ ظ‡ط°ط§ ط§ظ„ط³ظٹط±ظپط± ط¨ط¹ط¯.",
+            0xFFAA00
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const recentHistory = db.history.slice(-10).reverse(); // ط¢ط®ط± 10 ط¹ظ…ظ„ظٹط§طھ
+    
+    let historyText = "";
+    recentHistory.forEach((entry, index) => {
+        const timestamp = `<t:${Math.floor(new Date(entry.timestamp).getTime() / 1000)}:R>`;
+        const action = entry.action === "delete_category" ? "ًں—‚ï¸ڈ ط­ط°ظپ ظƒط§طھط¬ظˆط±ظٹ" : "ًں’¬ ط­ط°ظپ ط±ظˆظ…ط§طھ";
+        const user = `<@${entry.userId}>`;
+        
+        historyText += `**${index + 1}.** ${action} - ${timestamp}\n`;
+        historyText += `ًں‘¤ **ط§ظ„ظ…ط³طھط®ط¯ظ…:** ${user}\n`;
+        
+        if (entry.action === "delete_category") {
+            historyText += `ًں“پ **ط§ظ„ظƒط§طھط¬ظˆط±ظٹ:** ${entry.details.categoryName}\n`;
+            historyText += `ًں”¢ **ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ط­ط°ظˆظپط©:** ${entry.details.channelsDeleted}\n`;
+        } else {
+            historyText += `ًں”چ **ط§ظ„ط¨ط­ط«:** ${entry.details.namePrefix}\n`;
+            historyText += `ًں”¢ **ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ط­ط°ظˆظپط©:** ${entry.details.channelsDeleted}\n`;
+        }
+        historyText += "\n";
+    });
+
+    const embed = createEmbed(
+        "ًں“‌ طھط§ط±ظٹط® ط§ظ„ط¹ظ…ظ„ظٹط§طھ (ط¢ط®ط± 10 ط¹ظ…ظ„ظٹط§طھ)",
+        historyText,
+        0x00AE86
+    );
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+// ط£ظ…ط± Ping
+async function pingCommand(interaction) {
+    const sent = await interaction.reply({ content: "ط¬ط§ط±ظٹ ط­ط³ط§ط¨ ط³ط±ط¹ط© ط§ظ„ط§ط³طھط¬ط§ط¨ط©...", ephemeral: true, fetchReply: true });
+    const ping = sent.createdTimestamp - interaction.createdTimestamp;
+    const embed = createEmbed(
+        "ًںڈ“ ط³ط±ط¹ط© ط§ظ„ط§ط³طھط¬ط§ط¨ط©",
+        `ط³ط±ط¹ط© ط§ط³طھط¬ط§ط¨ط© ط§ظ„ط¨ظˆطھ: **${ping}ms**\n` +
+        `ط³ط±ط¹ط© ط§ط³طھط¬ط§ط¨ط© API ط¯ظٹط³ظƒظˆط±ط¯: **${client.ws.ping}ms**`,
+        0x00AE86
+    );
+    await interaction.editReply({ embeds: [embed], content: null });
+}
+
+// ط£ظ…ط± ظ‚ظپظ„ ط§ظ„ظ‚ظ†ط§ط©
+async function lockChannelCommand(interaction) {
+    if (!hasAdminPermission(interaction.member)) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+            "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const channel = interaction.options.getChannel("channel") || interaction.channel;
+    const role = interaction.guild.roles.everyone;
+
+    try {
+        await channel.permissionOverwrites.edit(role, {
+            SendMessages: false
+        });
+        const embed = createEmbed(
+            "ًں”’ طھظ… ظ‚ظپظ„ ط§ظ„ظ‚ظ†ط§ط©",
+            `طھظ… ظ‚ظپظ„ ظ‚ظ†ط§ط© ${channel} ط¨ظ†ط¬ط§ط­. ظ„ط§ ظٹظ…ظƒظ† ظ„ط£ظٹ ط´ط®طµ ط¥ط±ط³ط§ظ„ ط§ظ„ط±ط³ط§ط¦ظ„ ط§ظ„ط¢ظ†.`, 
+            0xFFAA00
+        );
+        await interaction.reply({ embeds: [embed] });
+    } catch (error) {
+        console.error("ط®ط·ط£ ظپظٹ ظ‚ظپظ„ ط§ظ„ظ‚ظ†ط§ط©:", error);
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£",
+            "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ظ‚ظپظ„ ط§ظ„ظ‚ظ†ط§ط©. طھط£ظƒط¯ ظ…ظ† ط£ظ† ط§ظ„ط¨ظˆطھ ظ„ط¯ظٹظ‡ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط©.",
+            0xFF0000
+        );
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+}
+
+// ط£ظ…ط± ظپطھط­ ط§ظ„ظ‚ظ†ط§ط©
+async function unlockChannelCommand(interaction) {
+    if (!hasAdminPermission(interaction.member)) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+            "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const channel = interaction.options.getChannel("channel") || interaction.channel;
+    const role = interaction.guild.roles.everyone;
+
+    try {
+        await channel.permissionOverwrites.edit(role, {
+            SendMessages: true
+        });
+        const embed = createEmbed(
+            "ًں”“ طھظ… ظپطھط­ ط§ظ„ظ‚ظ†ط§ط©",
+            `طھظ… ظپطھط­ ظ‚ظ†ط§ط© ${channel} ط¨ظ†ط¬ط§ط­. ظٹظ…ظƒظ† ظ„ظ„ط¬ظ…ظٹط¹ ط¥ط±ط³ط§ظ„ ط§ظ„ط±ط³ط§ط¦ظ„ ط§ظ„ط¢ظ†.`, 
+            0x00FF00
+        );
+        await interaction.reply({ embeds: [embed] });
+    } catch (error) {
+        console.error("ط®ط·ط£ ظپظٹ ظپطھط­ ط§ظ„ظ‚ظ†ط§ط©:", error);
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£",
+            "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ظپطھط­ ط§ظ„ظ‚ظ†ط§ط©. طھط£ظƒط¯ ظ…ظ† ط£ظ† ط§ظ„ط¨ظˆطھ ظ„ط¯ظٹظ‡ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط©.",
+            0xFF0000
+        );
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+}
+
+// ط£ظ…ط± ظ…ظ†ط¹ ط§ظ„ط±ظˆط§ط¨ط·
+async function deleteLinkCommand(interaction) {
+    if (!hasAdminPermission(interaction.member)) {
+        const embed = createEmbed(
+            "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+            "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+            0xFF0000
+        );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const status = interaction.options.getString("status");
+    const allowedRole = interaction.options.getRole("allowed_role");
+    const guildId = interaction.guildId;
+    const db = loadGuildDatabase(guildId);
+    
+    db.settings.deleteLinksEnabled = status === "yes";
+    db.settings.allowedRoleId = allowedRole ? allowedRole.id : null;
+    saveGuildDatabase(guildId, db);
+    
+    const embed = createEmbed(
+        "âœ… طھظ… طھط­ط¯ظٹط« ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ",
+        `ظ…ظٹط²ط© ظ…ظ†ط¹ ط§ظ„ط±ظˆط§ط¨ط·: **${status === "yes" ? "ظ…ظپط¹ظ„ط©" : "ظ…ط¹ط·ظ„ط©"}**\n` +
+        `ط§ظ„ط±طھط¨ط© ط§ظ„ظ…ط³ظ…ظˆط­ ظ„ظ‡ط§: **${allowedRole ? allowedRole.name : "ظ„ط§ ظٹظˆط¬ط¯"}**`,
+        0x00FF00
+    );
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+// ط¯ط§ظ„ط© ظ„ظ‚ط±ط§ط،ط© ظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ ظ„ظ„ط±ط¯ظˆط¯
+function getDatabase() {
+    const dbPath = path.join(__dirname, 'reply_database.json');
+    if (!fs.existsSync(dbPath)) {
+        fs.writeFileSync(dbPath, '{}');
+        return {};
+    }
+    const rawData = fs.readFileSync(dbPath);
+    return JSON.parse(rawData);
+}
+
+// ط¯ط§ظ„ط© ظ„ط­ظپط¸ ظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ ظ„ظ„ط±ط¯ظˆط¯
+function saveDatabase(data) {
+    const dbPath = path.join(__dirname, 'reply_database.json');
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+}
+
+// ط¯ط§ظ„ط© ظ„طھط­ظ…ظٹظ„ ط±ط¯ظˆط¯ ط³ظٹط±ظپط± ظ…ط¹ظٹظ†
+function getServerReplies(guildId) {
+    const db = getDatabase();
+    return db[guildId] || [];
+}
+
+// ط¯ط§ظ„ط© ظ„ط­ظپط¸ ط±ط¯ظˆط¯ ط³ظٹط±ظپط± ظ…ط¹ظٹظ†
+function saveServerReplies(guildId, replies) {
+    const db = getDatabase();
+    db[guildId] = replies;
+    saveDatabase(db);
+}
+
+// طھط³ط¬ظٹظ„ ط§ظ„ط£ظˆط§ظ…ط±
+const commands = [
+    new SlashCommandBuilder()
+        .setName("delete-category")
+        .setDescription("ط­ط°ظپ ظƒط§طھط¬ظˆط±ظٹ ظ…ط¹ ط¬ظ…ظٹط¹ ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ظˆط¬ظˆط¯ط© ظپظٹظ‡")
+        .addChannelOption(option =>
+            option.setName("category")
+                .setDescription("ط§ظ„ظƒط§طھط¬ظˆط±ظٹ ط§ظ„ظ…ط±ط§ط¯ ط­ط°ظپظ‡")
+                .setRequired(true)
+                .addChannelTypes(ChannelType.GuildCategory) 
+        ),
+    
+    new SlashCommandBuilder()
+        .setName("delete-room")
+        .setDescription("ط­ط°ظپ ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„طھظٹ طھط¨ط¯ط£ ط¨ظ†طµ ظ…ط¹ظٹظ†")
+        .addStringOption(option =>
+            option.setName("name")
+                .setDescription("ط¨ط¯ط§ظٹط© ط§ط³ظ… ط§ظ„ط±ظˆظ…ط§طھ ط§ظ„ظ…ط±ط§ط¯ ط­ط°ظپظ‡ط§")
+                .setRequired(true)
+        ),
+    
+    new SlashCommandBuilder()
+        .setName("help")
+        .setDescription("ط¹ط±ط¶ ظ…ط³ط§ط¹ط¯ط© ط§ظ„ط¨ظˆطھ"),
+    
+    new SlashCommandBuilder()
+        .setName("info")
+        .setDescription("ظ…ط¹ظ„ظˆظ…ط§طھ ط¹ظ† ط§ظ„ط¨ظˆطھ"),
+    
+    new SlashCommandBuilder()
+        .setName("stats")
+        .setDescription("ط¥ط­طµط§ط¦ظٹط§طھ ط§ظ„ط³ظٹط±ظپط±"),
+    
+    new SlashCommandBuilder()
+        .setName("history")
+        .setDescription("طھط§ط±ظٹط® ط§ظ„ط¹ظ…ظ„ظٹط§طھ ظپظٹ ط§ظ„ط³ظٹط±ظپط±"),
+
+    new SlashCommandBuilder()
+        .setName("ping")
+        .setDescription("ط¹ط±ط¶ ط³ط±ط¹ط© ط§ط³طھط¬ط§ط¨ط© ط§ظ„ط¨ظˆطھ"),
+
+    new SlashCommandBuilder()
+        .setName("lock")
+        .setDescription("ظ‚ظپظ„ ظ‚ظ†ط§ط© ظ…ط¹ظٹظ†ط© (ظ„ظ„ظ…ط´ط±ظپظٹظ† ظپظ‚ط·)")
+        .addChannelOption(option =>
+            option.setName("channel")
+                .setDescription("ط§ظ„ظ‚ظ†ط§ط© ط§ظ„ظ…ط±ط§ط¯ ظ‚ظپظ„ظ‡ط§")
+                .setRequired(false)
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice) 
+        ),
+
+    new SlashCommandBuilder()
+        .setName("unlock")
+        .setDescription("ظپطھط­ ظ‚ظ†ط§ط© ظ…ط¹ظٹظ†ط© (ظ„ظ„ظ…ط´ط±ظپظٹظ† ظپظ‚ط·)")
+        .addChannelOption(option =>
+            option.setName("channel")
+                .setDescription("ط§ظ„ظ‚ظ†ط§ط© ط§ظ„ظ…ط±ط§ط¯ ظپطھط­ظ‡ط§")
+                .setRequired(false)
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice) 
+        ),
+    
+    new SlashCommandBuilder()
+        .setName("add-reply")
+        .setDescription("ط¥ط¶ط§ظپط© ط±ط¯ طھظ„ظ‚ط§ط¦ظٹ ظ„ظƒظ„ظ…ط§طھ ظ…ط­ط¯ط¯ط©")
+        .addStringOption(option =>
+            option.setName("words")
+                .setDescription("ط§ظ„ظƒظ„ظ…ط§طھ ط§ظ„ظ…ط·ظ„ظˆط¨ ط§ظ„ط±ط¯ ط¹ظ„ظٹظ‡ط§")
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option.setName("reply")
+                .setDescription("ط§ظ„ط±ط¯ ط§ظ„طھظ„ظ‚ط§ط¦ظٹ")
+                .setRequired(true)
+        ),
+    
+    new SlashCommandBuilder()
+        .setName("reply")
+        .setDescription("ط¹ط±ط¶ ط¬ظ…ظٹط¹ ط§ظ„ط±ط¯ظˆط¯ ط§ظ„طھظ„ظ‚ط§ط¦ظٹط© ظ…ط¹ ط®ظٹط§ط±ط§طھ ط§ظ„ط­ط°ظپ"),
+    
+    new SlashCommandBuilder()
+        .setName("delete_link")
+        .setDescription("طھظپط¹ظٹظ„ ط£ظˆ طھط¹ط·ظٹظ„ ظ…ظٹط²ط© ظ…ظ†ط¹ ط§ظ„ط±ظˆط§ط¨ط·")
+        .addStringOption(option =>
+            option.setName("status")
+                .setDescription("طھظپط¹ظٹظ„ ط£ظˆ طھط¹ط·ظٹظ„ ط§ظ„ظ…ظٹط²ط© (yes/no)")
+                .setRequired(true)
+                .addChoices(
+                    { name: "yes", value: "yes" },
+                    { name: "no", value: "no" }
+                )
+        )
+        .addRoleOption(option =>
+            option.setName("allowed_role")
+                .setDescription("ط§ظ„ط±طھط¨ط© ط§ظ„ظ…ط³ظ…ظˆط­ ظ„ظ‡ط§ ط¨ط¥ط±ط³ط§ظ„ ط§ظ„ط±ظˆط§ط¨ط·")
+                .setRequired(false)
+        ),
+];
+
+// ط£ط­ط¯ط§ط« ط§ظ„ط¨ظˆطھ
+client.once("ready", async () => {
+    console.log(`âœ… طھظ… طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„ ط¨ط§ط³ظ… ${client.user.tag}!`);
+    
+    // طھط¹ظٹظٹظ† ط­ط§ظ„ط© ط§ظ„ط¨ظˆطھ
+    client.user.setActivity("N-MUC YouTube Channel", { type: ActivityType.Watching });
+    
+    // طھط³ط¬ظٹظ„ ط§ظ„ط£ظˆط§ظ…ط±
+    try {
+        console.log("ًں”„ ط¨ط¯ط، طھط­ط¯ظٹط« ط£ظˆط§ظ…ط± ط§ظ„طھط·ط¨ظٹظ‚...");
+        await client.application.commands.set(commands);
+        console.log("âœ… طھظ… طھط­ط¯ظٹط« ط£ظˆط§ظ…ط± ط§ظ„طھط·ط¨ظٹظ‚ ط¨ظ†ط¬ط§ط­!");
+    } catch (error) {
+        console.error("â‌Œ ط®ط·ط£ ظپظٹ طھط³ط¬ظٹظ„ ط§ظ„ط£ظˆط§ظ…ط±:", error);
+    }
+});
+
+// ط¹ظ†ط¯ ط§ظ†ط¶ظ…ط§ظ… ط§ظ„ط¨ظˆطھ ظ„ط³ظٹط±ظپط± ط¬ط¯ظٹط¯
+client.on("guildCreate", async guild => {
+    console.log(`ًںژ‰ طھظ… ط¥ط¶ط§ظپط© ط§ظ„ط¨ظˆطھ ظ„ط³ظٹط±ظپط± ط¬ط¯ظٹط¯: ${guild.name} (${guild.id})`);
+    
+    // ط¥ظ†ط´ط§ط، ظ‚ط§ط¹ط¯ط© ط¨ظٹط§ظ†ط§طھ ط®ط§طµط© ط¨ط§ظ„ط³ظٹط±ظپط±
+    const db = loadGuildDatabase(guild.id);
+    db.guildName = guild.name;
+    db.joinedAt = new Date().toISOString();
+    saveGuildDatabase(guild.id, db);
+    
+    // ط¥ط±ط³ط§ظ„ ط±ط³ط§ظ„ط© طھط±ط­ظٹط¨ ظ„ظ„ظ…ط§ظ„ظƒ
+    try {
+        const owner = await guild.fetchOwner();
+        const welcomeEmbed = createEmbed(
+            "ًںژ‰ ظ…ط±ط­ط¨ط§ظ‹ ط¨ظƒ ظپظٹ ط¨ظˆطھ N-MUC!",
+            `ط´ظƒط±ط§ظ‹ ظ„ظƒ ظ„ط¥ط¶ط§ظپط© ط§ظ„ط¨ظˆطھ ط¥ظ„ظ‰ ط³ظٹط±ظپط± **${guild.name}**!\n\n` +
+            `**ًں”§ ظ„ظ„ط¨ط¯ط،:**\n` +
+            `â€¢ ط§ط³طھط®ط¯ظ… ط§ظ„ط£ظ…ط± \`/help\` ظ„ط¹ط±ط¶ ط¬ظ…ظٹط¹ ط§ظ„ط£ظˆط§ظ…ط± ط§ظ„ظ…طھط§ط­ط©\n` +
+            `â€¢ طھط£ظƒط¯ ظ…ظ† ط£ظ† ط§ظ„ط¨ظˆطھ ظ„ط¯ظٹظ‡ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط©\n` +
+            `â€¢ طھظ… ط¥ظ†ط´ط§ط، ظ‚ط§ط¹ط¯ط© ط¨ظٹط§ظ†ط§طھ ط®ط§طµط© ط¨ط³ظٹط±ظپط±ظƒ\n\n` +
+            `**ًںژ¥ ظ„ط§ طھظ†ط³ ط²ظٹط§ط±ط© ظ‚ظ†ط§طھظ†ط§:**\n[N-MUC ط¹ظ„ظ‰ ظٹظˆطھظٹظˆط¨](${YOUTUBE_CHANNEL})`,
+            0x00FF00
+        );
+        
+        await owner.send({ embeds: [welcomeEmbed] });
+    } catch (error) {
+        console.log("ظ„ط§ ظٹظ…ظƒظ† ط¥ط±ط³ط§ظ„ ط±ط³ط§ظ„ط© طھط±ط­ظٹط¨ ظ„ظ„ظ…ط§ظ„ظƒ");
+    }
+});
+
+// ظ…ط¹ط§ظ„ط¬ ط§ظ„طھظپط§ط¹ظ„ط§طھ
+client.on("interactionCreate", async interaction => {
+    if (interaction.isCommand()) {
+        const { commandName } = interaction;
+
+        // ط§ظ„ط£ظˆط§ظ…ط± ط§ظ„ظ…طھط§ط­ط© ظ„ظ„ط¬ظ…ظٹط¹
+        if (["help", "info", "ping"].includes(commandName)) {
+            switch (commandName) {
+                case "help":
+                    await helpCommand(interaction);
+                    break;
+                case "info":
+                    await infoCommand(interaction);
+                    break;
+                case "ping":
+                    await pingCommand(interaction);
+                    break;
+            }
+        } else {
+            // ط§ظ„طھط­ظ‚ظ‚ ظ…ظ† طµظ„ط§ط­ظٹط§طھ ط§ظ„ظ…ط´ط±ظپ
+            if (!hasAdminPermission(interaction.member)) {
+                const embed = createEmbed(
+                    "â‌Œ ط®ط·ط£ ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ",
+                    "ظ„ظٹط³ ظ„ط¯ظٹظƒ ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ظƒط§ظپظٹط© ظ„ط§ط³طھط®ط¯ط§ظ… ظ‡ط°ط§ ط§ظ„ط£ظ…ط±.\nظٹط¬ط¨ ط£ظ† طھظƒظˆظ† ظ„ط¯ظٹظƒ طµظ„ط§ط­ظٹط© **Administrator**.",
+                    0xFF0000
+                );
+                return interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
+            switch (commandName) {
+                case "delete-category":
+                    await deleteCategory(interaction);
+                    break;
+                case "delete-room":
+                    await deleteRoomsByName(interaction);
+                    break;
+                case "stats":
+                    await statsCommand(interaction);
+                    break;
+                case "history":
+                    await historyCommand(interaction);
+                    break;
+                case "lock":
+                    await lockChannelCommand(interaction);
+                    break;
+                case "unlock":
+                    await unlockChannelCommand(interaction);
+                    break;
+                case "add-reply":
+                    const words = interaction.options.getString("words");
+                    const replyText = interaction.options.getString("reply");
+                    const guildId = interaction.guildId;
+                    const replies = getServerReplies(guildId);
+                    replies.push({ id: Date.now().toString(), words, reply: replyText });
+                    saveServerReplies(guildId, replies);
+                    await interaction.reply({
+                        content: `âœ… طھظ… ط¥ط¶ط§ظپط© ط±ط¯ طھظ„ظ‚ط§ط¦ظٹ ظ„ظ„ظƒظ„ظ…ط§طھ: \`${words}\`\nط§ظ„ط±ط¯: \`${replyText}\``,
+                        ephemeral: true
+                    });
+                    break;
+                case "reply":
+                    const repliesList = getServerReplies(interaction.guildId);
+                    if (repliesList.length === 0) {
+                        return interaction.reply({
+                            content: "âڑ ï¸ڈ ظ„ط§ طھظˆط¬ط¯ ط±ط¯ظˆط¯ طھظ„ظ‚ط§ط¦ظٹط© ظپظٹ ظ‡ط°ط§ ط§ظ„ط³ظٹط±ظپط±!",
+                            ephemeral: true
+                        });
+                    }
+                    const embed = new EmbedBuilder()
+                        .setTitle("ًں“‌ ط§ظ„ط±ط¯ظˆط¯ ط§ظ„طھظ„ظ‚ط§ط¦ظٹط© ظ„ظ„ط³ظٹط±ظپط±")
+                        .setColor("#3498db")
+                        .setDescription("ط§ط®طھط± ط±ط¯ط§ظ‹ ظ…ظ† ط§ظ„ظ‚ط§ط¦ظ…ط© ظ„ط­ط°ظپظ‡:");
+                    const options = repliesList.map(reply => ({
+                        label: `${reply.words.substring(0, 40)}${reply.words.length > 40 ? "..." : ""}`,
+                        description: `ID: ${reply.id} | ط§ظ„ط±ط¯: ${reply.reply.substring(0, 30)}...`,
+                        value: reply.id
+                    }));
+                    const menu = new StringSelectMenuBuilder()
+                        .setCustomId("delete-reply")
+                        .setPlaceholder("ط§ط®طھط± ط±ط¯ط§ظ‹ ظ„ط­ط°ظپظ‡")
+                        .addOptions(options);
+                    const row = new ActionRowBuilder().addComponents(menu);
+                    await interaction.reply({
+                        embeds: [embed],
+                        components: [row],
+                        ephemeral: true
+                    });
+                    break;
+                case "delete_link":
+                    await deleteLinkCommand(interaction);
+                    break;
+                default:
+                    const unknownEmbed = createEmbed(
+                        "â‌Œ ط£ظ…ط± ط؛ظٹط± ظ…ط¹ط±ظˆظپ",
+                        "ظ‡ط°ط§ ط§ظ„ط£ظ…ط± ط؛ظٹط± ظ…ظˆط¬ظˆط¯. ط§ط³طھط®ط¯ظ… `/help` ظ„ط¹ط±ط¶ ط§ظ„ط£ظˆط§ظ…ط± ط§ظ„ظ…طھط§ط­ط©.",
+                        0xFF0000
+                    );
+                    await interaction.reply({ embeds: [unknownEmbed], ephemeral: true });
+            }
+        }
+    } else if (interaction.isButton()) {
+        await handleButtonInteraction(interaction);
+    } else if (interaction.isStringSelectMenu() && interaction.customId === "delete-reply") {
+        const replyId = interaction.values[0];
+        const guildId = interaction.guildId;
+        let replies = getServerReplies(guildId);
+        const initialLength = replies.length;
+        replies = replies.filter(reply => reply.id !== replyId);
+        if (replies.length === initialLength) {
+            return interaction.update({
+                content: "â‌Œ ظ„ظ… ظٹطھظ… ط§ظ„ط¹ط«ظˆط± ط¹ظ„ظ‰ ط§ظ„ط±ط¯ ط§ظ„ظ…ط­ط¯ط¯!",
+                components: [],
+                embeds: []
+            });
+        }
+        saveServerReplies(guildId, replies);
+        await interaction.update({
+            content: `âœ… طھظ… ط­ط°ظپ ط§ظ„ط±ط¯ ط§ظ„طھظ„ظ‚ط§ط¦ظٹ ط¨ظ†ط¬ط§ط­! (ID: ${replyId})`,
+            components: [],
+            embeds: []
+        });
+    }
+});
+
+// ظ†ط¸ط§ظ… ط§ظ„ط±ط¯ ط§ظ„طھظ„ظ‚ط§ط¦ظٹ ط¹ظ„ظ‰ ط§ظ„ط±ط³ط§ط¦ظ„ ظˆظ…ظ†ط¹ ط§ظ„ط±ظˆط§ط¨ط·
+client.on("messageCreate", async message => {
+    if (message.author.bot) return;
+    
+    const guildId = message.guildId;
+    const db = loadGuildDatabase(guildId);
+    
+    // ظ…ظ†ط¹ ط§ظ„ط±ظˆط§ط¨ط·
+    if (db.settings.deleteLinksEnabled) {
+        const urlRegex = /(https?:\/\/[^\s]+|\.com|discord\.gg)/g;
+        if (urlRegex.test(message.content)) {
+            const allowedRoleId = db.settings.allowedRoleId;
+            if (!allowedRoleId || !message.member.roles.cache.has(allowedRoleId)) {
+                await message.delete();
+                await message.channel.send({
+                    content: `${message.author}, ظ„ط§ ظٹظ…ظƒظ†ظƒ ط¥ط±ط³ط§ظ„ ط±ظˆط§ط¨ط· ظ‡ظ†ط§!`,
+                    ephemeral: true
+                });
+                return;
+            }
+        }
+    }
+    
+    // ط§ظ„ط±ط¯ظˆط¯ ط§ظ„طھظ„ظ‚ط§ط¦ظٹط©
+    const replies = getServerReplies(guildId);
+    const content = message.content.toLowerCase();
+    for (const reply of replies) {
+        if (content.includes(reply.words.toLowerCase())) {
+            message.reply(reply.reply);
+            break;
+        }
+    }
+});
+
+// طھط´ط؛ظٹظ„ ط§ظ„ط¨ظˆطھ
+client.login(DISCORD_TOKEN);
