@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, PermissionsBitField, EmbedBuilder, SlashComma
 const fs = require("fs");
 const path = require("path");
 
-// ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ط¨ظˆطھ
+//
 const DISCORD_TOKEN = "MTQyOTIxMDc5NjU1NDA1OTgxNg.Geo_DW.FKmf8dX4iPCzitnKVafyAT4k2tDkOYdfrUwqM0"; // طھظˆظƒظ†ظƒ
 const CLIENT_ID = "1421872399237910600"; // ط§ظٹط¯ظٹ ط§ظ„ط¨ظˆطھ
 const YOUTUBE_CHANNEL = "https://youtube.com/@n-muc?si=H05Z3PX9h1WF-12X";// ط±ط§ط¨ط· ظ‚ظ†ط§طھظƒ
