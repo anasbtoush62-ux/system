@@ -928,4 +928,4 @@ client.on("messageCreate", async message => {
 });
 
 // طھط´ط؛ظٹظ„ ط§ظ„ط¨ظˆطھ
-client.login(DISCORD_TOKEN);
+client.login(MTQyOTIxMDc5NjU1NDA1OTgxNg.Geo_DW.FKmf8dX4iPCzitnKVafyAT4k2tDkOYdfrUwqM0);
